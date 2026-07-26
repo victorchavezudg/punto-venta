@@ -1,0 +1,52 @@
+====================================================
+   MI PUNTO DE VENTA — Tianguis (basado en eleventa)
+====================================================
+
+Qué es:
+Una mini caja registradora para tu celular. Busca precios escribiendo
+o escaneando el código de barras, arma una venta y te calcula el total
+y el cambio. Trae tus 1,794 productos con precio, mayoreo y existencia.
+
+------------------------------------------------
+PARA QUE FUNCIONE LA CÁMARA: SUBIRLA A INTERNET (GRATIS)
+------------------------------------------------
+La cámara del celular solo funciona si la app está abierta desde un
+enlace de internet (con candadito https), no como archivo suelto.
+La forma más fácil y gratis:
+
+1. En tu computadora entra a:  https://app.netlify.com/drop
+2. Inicia sesión con tu cuenta de Google (la misma del correo).
+3. Arrastra la carpeta "app" (esta carpeta, con todos los archivos)
+   a la zona que dice "Drag and drop your site output folder here".
+4. En unos segundos te da un enlace tipo:  https://algo-algo.netlify.app
+5. Abre ese enlace en tu CELULAR (Chrome en Android o Safari en iPhone).
+
+------------------------------------------------
+INSTALARLA EN EL CELULAR (para abrirla como app y usarla sin internet)
+------------------------------------------------
+- Android (Chrome): menú (⋮) > "Agregar a pantalla principal".
+- iPhone (Safari): botón compartir (cuadro con flecha) > "Agregar a inicio".
+
+Ábrela UNA VEZ con internet para que se guarde; después funciona
+SIN señal (la búsqueda y los precios). La cámara pide señal solo la
+primera vez que la instalas.
+
+------------------------------------------------
+CÓMO SE USA
+------------------------------------------------
+- Escribe el nombre o el código -> aparece el precio al instante.
+- Toca "Escanear" para leer el código de barras con la cámara.
+- Toca el producto o el botón "+" para agregarlo a la venta.
+- Abajo se ve el TOTAL. Toca "Ver venta" para el detalle.
+- Escribe con cuánto te paga el cliente y te dice el CAMBIO.
+- "Cobrado" o "Nueva venta" para empezar otra.
+- Botón "🔒 Costo": muéstralo solo tú para saber hasta dónde rebajar.
+
+Ojo: 650 productos tienen clave inventada (sin código de barras físico);
+esos se buscan escribiendo el nombre.
+
+------------------------------------------------
+ACTUALIZAR PRECIOS/INVENTARIO MÁS ADELANTE
+------------------------------------------------
+Exporta de nuevo tu Excel de eleventa y pídeme que regenere la app;
+te la reemplazo con los datos nuevos.

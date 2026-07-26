@@ -1,0 +1,15 @@
+{
+  "name": "Mi Punto de Venta",
+  "short_name": "Mi Venta",
+  "description": "Consulta de precios y venta rápida en el tianguis",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d6e5a",
+  "theme_color": "#0d6e5a",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
