@@ -2,6 +2,7 @@
 (function () {
   "use strict";
 
+  var VERSION = "2.0";
   var S = window.Store;
   var $ = function (id) { return document.getElementById(id); };
 
@@ -300,7 +301,8 @@
     var ult = c.lastSync ? new Date(c.lastSync).toLocaleString("es-MX") : "nunca";
     var html = "";
 
-    html += '<div class="statline"><span>Mis cambios guardados</span><b>' + edits + '</b></div>' +
+    html += '<div class="statline"><span>Versión de la app</span><b>' + VERSION + '</b></div>' +
+            '<div class="statline"><span>Mis cambios guardados</span><b>' + edits + '</b></div>' +
             '<div class="statline"><span>Última sincronización</span><b style="font-size:12.5px">' + ult + '</b></div>' +
             '<div class="statline"><span>Estado</span><b style="font-size:12.5px">' + escapeHtml(st.msg) + '</b></div>';
 
@@ -330,6 +332,10 @@
       '<button class="' + (c.autoStock !== false ? 'b-save' : 'b-rest') + '" id="toggleStock">' +
       (c.autoStock !== false ? '✓ Descontar del inventario' : '✗ No descontar') + '</button></div>';
 
+    html += '<div style="margin-top:6px; font-weight:700; font-size:14px">🔄 Actualizar la app</div>' +
+      '<div class="hint" style="margin-top:6px">Si Claude publicó mejoras y no las ves, toca aquí (necesitas señal). Tus cambios NO se borran.</div>' +
+      '<div class="btnrow" style="margin-bottom:18px"><button class="b-save" id="forceUpdate">⬇️ Buscar actualización</button></div>';
+
     html += '<div style="margin-top:6px; font-weight:700; font-size:14px">🧹 Mantenimiento</div>' +
       '<div class="btnrow" style="margin-top:8px">' +
       '<button class="b-rest" id="verBorrados">Ver productos quitados</button>' +
@@ -352,6 +358,21 @@
     if (sn) sn.addEventListener("click", function () {
       toast("Sincronizando…", "ok");
       S.sync.run(true).then(function (ok) { toast(ok ? "☁️ Al día" : S.sync.get().msg, ok ? "ok" : "err"); renderCfg(); });
+    });
+    $("forceUpdate").addEventListener("click", function () {
+      toast("Buscando actualización…", "ok");
+      var done = function () { location.reload(true); };
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (rs) {
+          return Promise.all(rs.map(function (r) { return r.unregister(); }));
+        }).then(function () {
+          if (window.caches && caches.keys) {
+            return caches.keys().then(function (ks) {
+              return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+            });
+          }
+        }).then(done).catch(done);
+      } else done();
     });
     $("toggleStock").addEventListener("click", function () {
       S.setConf({ autoStock: !(S.getConf().autoStock !== false) });
