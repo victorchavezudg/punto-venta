@@ -1,9 +1,11 @@
-/* Service Worker — cachea todo para funcionar sin internet */
-var CACHE = "punto-venta-v1";
+/* Service Worker — cachea la app para funcionar sin internet.
+   OJO: subir el número de versión cada vez que cambien los archivos. */
+var CACHE = "punto-venta-v2";
 var ASSETS = [
   "./",
   "./index.html",
   "./app.js",
+  "./store.js",
   "./data.js",
   "./html5-qrcode.min.js",
   "./manifest.webmanifest",
@@ -25,15 +27,27 @@ self.addEventListener("activate", function (e) {
 });
 
 self.addEventListener("fetch", function (e) {
-  if (e.request.method !== "GET") return;
+  var req = e.request;
+  if (req.method !== "GET") return;
+  var url = new URL(req.url);
+  // nunca cachear la API de GitHub (sincronización)
+  if (url.hostname === "api.github.com" || url.hostname.indexOf("githubusercontent") > -1) return;
+
+  // los archivos propios: primero red, si falla la caché (así se actualizan solos)
+  if (url.origin === location.origin) {
+    e.respondWith(
+      fetch(req).then(function (resp) {
+        var copy = resp.clone();
+        caches.open(CACHE).then(function (c) { try { c.put(req, copy); } catch (x) {} });
+        return resp;
+      }).catch(function () {
+        return caches.match(req).then(function (hit) { return hit || caches.match("./index.html"); });
+      })
+    );
+    return;
+  }
+
   e.respondWith(
-    caches.match(e.request).then(function (hit) {
-      return hit || fetch(e.request).then(function (resp) {
-        return caches.open(CACHE).then(function (c) {
-          try { c.put(e.request, resp.clone()); } catch (x) {}
-          return resp;
-        });
-      }).catch(function () { return caches.match("./index.html"); });
-    })
+    caches.match(req).then(function (hit) { return hit || fetch(req); })
   );
 });
