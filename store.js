@@ -35,7 +35,11 @@ window.Store = (function () {
   if (!overlay.items) overlay.items = {};
   if (!overlay.sales) overlay.sales = [];
 
-  var conf = readLS(LS_CONF, { token: "", gistId: "", lastSync: 0, autoStock: true });
+  var conf = readLS(LS_CONF, { token: "", gistId: "", lastSync: 0, autoStock: true, deviceId: "" });
+  if (!conf.deviceId) {
+    conf.deviceId = "d" + Math.random().toString(36).slice(2, 8) + Date.now().toString(36);
+    writeLS(LS_CONF, conf);
+  }
 
   var base = (window.PRODUCTS || []).slice();
   var baseByCode = {};
@@ -49,9 +53,37 @@ window.Store = (function () {
   function emit(what) { listeners.forEach(function (f) { try { f(what); } catch (e) {} }); }
 
   // ---------- merge base + overlay ----------
+  // Cuántas piezas se han vendido de cada producto, y cuándo.
+  // Así el descuento se calcula sumando las ventas de todos los celulares,
+  // en vez de que cada uno guarde su propio número final (que se pisaría).
+  function ventasPorCodigo() {
+    var map = {};
+    (overlay.sales || []).forEach(function (s) {
+      if (s.dec === false) return;
+      (s.items || []).forEach(function (i) {
+        if (!map[i.c]) map[i.c] = [];
+        map[i.c].push({ t: s.t, q: Number(i.q) || 0 });
+      });
+    });
+    return map;
+  }
+
+  function existenciaReal(code, baseE, ov, vpc) {
+    // punto de partida: el ajuste manual más reciente, o lo que traía eleventa
+    var e0 = (ov && ov.e !== undefined) ? Number(ov.e) : Number(baseE);
+    var t0 = (ov && ov._te) ? ov._te : 0;
+    var vendidas = 0;
+    var lista = vpc[code] || [];
+    for (var i = 0; i < lista.length; i++) {
+      if (lista[i].t > t0) vendidas += lista[i].q;   // solo lo vendido DESPUÉS del ajuste
+    }
+    return (isFinite(e0) ? e0 : 0) - vendidas;
+  }
+
   function rebuild() {
     merged = [];
     mergedByCode = {};
+    var vpc = ventasPorCodigo();
     var i, p, ov;
 
     for (i = 0; i < base.length; i++) {
@@ -64,7 +96,7 @@ window.Store = (function () {
         co: (ov && ov.co !== undefined) ? ov.co : p.co,
         v: (ov && ov.v !== undefined) ? ov.v : p.v,
         m: (ov && ov.m !== undefined) ? ov.m : p.m,
-        e: (ov && ov.e !== undefined) ? ov.e : p.e,
+        e: existenciaReal(p.c, p.e, ov, vpc),
         d: (ov && ov.d !== undefined) ? ov.d : p.d,
         _edit: !!ov,
         _new: false
@@ -82,7 +114,7 @@ window.Store = (function () {
         c: code,
         n: ov.n || "(sin nombre)",
         co: numOr(ov.co, 0), v: numOr(ov.v, 0), m: numOr(ov.m, 0),
-        e: numOr(ov.e, 0), d: ov.d || "Nuevos",
+        e: existenciaReal(code, 0, ov, vpc), d: ov.d || "Nuevos",
         _edit: true, _new: true
       };
       merged.push(np);
@@ -120,7 +152,8 @@ window.Store = (function () {
       if (fields[k] === undefined) return;
       var val = (k === "n" || k === "d") ? String(fields[k]).trim() : numOr(fields[k], 0);
       // si vuelve a coincidir con el original, quitamos el override
-      if (bp && !it._new && bp[k] === val) { delete it[k]; }
+      if (k === "e") it._te = now();   // nuevo punto de partida del conteo
+      if (bp && !it._new && bp[k] === val && k !== "e") { delete it[k]; }
       else { it[k] = val; }
     });
     // si el override quedó vacío y no es nuevo ni borrado, lo eliminamos
@@ -133,7 +166,7 @@ window.Store = (function () {
     var it = overlay.items[code];
     if (!it) return;
     if (it._new || it._del) return;
-    var keys = Object.keys(it).filter(function (k) { return k !== "_t"; });
+    var keys = Object.keys(it).filter(function (k) { return k !== "_t" && k !== "_te"; });
     if (keys.length === 0) delete overlay.items[code];
   }
 
@@ -148,6 +181,7 @@ window.Store = (function () {
     it.v = numOr(fields.v, 0);
     it.m = numOr(fields.m, 0);
     it.e = numOr(fields.e, 0);
+    it._te = now();
     it.d = String(fields.d || "Nuevos").trim();
     persist();
     return { ok: true, code: code };
@@ -174,21 +208,15 @@ window.Store = (function () {
   // ---------- ventas ----------
   function registrarVenta(items, total, descontar) {
     // items: [{c, n, q, p}]
+    // No guardamos la existencia final: guardamos LA VENTA.
+    // La existencia se calcula sumando las ventas de todos los celulares,
+    // así dos personas pueden vender a la vez sin perder descuentos.
     var t = now();
-    if (descontar !== false) {
-      items.forEach(function (it) {
-        var prod = mergedByCode[it.c];
-        if (!prod) return;
-        var nueva = (numOr(prod.e, 0) - it.q);
-        var ov = touch(it.c);
-        var bp = baseByCode[it.c];
-        if (bp && !ov._new && bp.e === nueva) delete ov.e;
-        else ov.e = nueva;
-        cleanupIfEmpty(it.c);
-      });
-    }
     overlay.sales.push({
+      id: conf.deviceId + "-" + t + "-" + Math.random().toString(36).slice(2, 7),
+      dev: conf.deviceId,
       t: t,
+      dec: descontar !== false,
       total: total,
       items: items.map(function (i) { return { c: i.c, n: i.n, q: i.q, p: i.p }; })
     });
@@ -232,7 +260,7 @@ window.Store = (function () {
     // ventas: unir sin duplicar (por marca de tiempo + total)
     var seen = {};
     (a.sales || []).concat(b.sales || []).forEach(function (s) {
-      var key = s.t + "|" + s.total;
+      var key = s.id || (s.dev || "") + "|" + s.t + "|" + s.total;
       if (seen[key]) return;
       seen[key] = 1;
       out.sales.push(s);
@@ -376,6 +404,13 @@ window.Store = (function () {
     }
 
     window.addEventListener("online", function () { if (conf.token) run(false); });
+    // con varios celulares conviene refrescar seguido:
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden && conf.token) run(false);
+    });
+    setInterval(function () {
+      if (conf.token && !document.hidden && navigator.onLine) run(false);
+    }, 60000);
     window.addEventListener("offline", function () { setState("offline", "Sin señal · se guarda en el celular"); });
 
     return { run: run, schedule: schedule, get: get, pull: pull, push: push, setState: setState };

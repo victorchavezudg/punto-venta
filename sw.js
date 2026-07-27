@@ -1,6 +1,6 @@
 /* Service Worker — cachea la app para funcionar sin internet.
    OJO: subir el número de versión cada vez que cambien los archivos. */
-var CACHE = "punto-venta-v2";
+var CACHE = "punto-venta-v3";
 var ASSETS = [
   "./",
   "./index.html",

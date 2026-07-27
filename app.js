@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "2.0";
+  var VERSION = "2.1";
   var S = window.Store;
   var $ = function (id) { return document.getElementById(id); };
 
