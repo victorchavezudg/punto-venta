@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "3.0";
+  var VERSION = "4.0";
   var S = window.Store;
   var $ = function (id) { return document.getElementById(id); };
 
@@ -27,6 +27,8 @@
   var lastTerm = "";
   var descTipo = "$";      // "$" pesos o "%" porcentaje
   var ultimaVenta = null;  // para el ticket
+  var formaPago = "efectivo";
+  var clienteSel = null;   // {id, n, tel, lim, saldo}
 
   // ---------- índice de búsqueda ----------
   var index = [];
@@ -192,9 +194,41 @@
   }
   $("dPesos").addEventListener("click", function () { setTipoDesc("$"); });
   $("dPct").addEventListener("click", function () { setTipoDesc("%"); });
+
+  function setForma(f) {
+    formaPago = f;
+    $("formas").querySelectorAll(".forma").forEach(function (b) {
+      b.classList.toggle("activo", b.getAttribute("data-forma") === f);
+    });
+    $("cliRow").style.display = (f === "credito") ? "flex" : "none";
+    $("pagoRow").style.display = (f === "efectivo") ? "flex" : "none";
+    if (f !== "efectivo") { $("paga").value = ""; }
+    pintaCliente();
+    calcCambio();
+  }
+  function pintaCliente() {
+    var el = $("cliNombre");
+    if (!el) return;
+    if (clienteSel) {
+      var c = S.getCliente(clienteSel.id) || clienteSel;
+      clienteSel = c;
+      el.innerHTML = escapeHtml(c.n) + (c.saldo > 0
+        ? ' <span style="color:#c0392b">· debe ' + money(c.saldo) + '</span>' : "");
+    } else el.textContent = "Sin cliente";
+  }
+  $("formas").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-forma]");
+    if (b) setForma(b.getAttribute("data-forma"));
+  });
+  $("pickCli").addEventListener("click", function () {
+    if (window.Mas && window.Mas.elegirCliente) {
+      window.Mas.elegirCliente(function (cli) { clienteSel = cli; pintaCliente(); });
+    }
+  });
   $("openCart").addEventListener("click", function () { renderCart(); openSheet("cartSheet"); });
   $("clearCart").addEventListener("click", function () {
     cart = {}; $("paga").value = ""; $("descVal").value = "";
+    clienteSel = null; setForma("efectivo");
     updateBar(); renderCart(); closeSheet("cartSheet");
     toast("Venta cancelada", "ok");
   });
@@ -205,29 +239,52 @@
       var p = S.get(k);
       return { c: k, n: p ? p.n : k, q: cart[k], p: p ? p.v : 0 };
     });
+    if (formaPago === "credito" && !clienteSel) {
+      toast("Para fiar, elige el cliente", "err");
+      return;
+    }
+    if (formaPago === "credito" && clienteSel) {
+      var cc = S.getCliente(clienteSel.id);
+      if (cc && cc.lim > 0 && (cc.saldo + t.total) > cc.lim) {
+        if (!confirm("Con esta venta " + cc.n + " rebasa su limite de credito (" +
+                     money(cc.lim) + ").\n\nDebe " + money(cc.saldo) +
+                     " y esta venta es de " + money(t.total) + ".\n\n\u00bfFiar de todos modos?")) return;
+      }
+    }
     var descontar = S.getConf().autoStock !== false;
     var pagaCon = parseFloat($("paga").value);
     var venta = S.registrarVenta(items, t.total, descontar, {
       sub: t.sub,
-      desc: (t.desc && t.desc.monto > 0) ? t.desc : null
+      desc: (t.desc && t.desc.monto > 0) ? t.desc : null,
+      forma: formaPago,
+      cli: clienteSel ? clienteSel.id : null
     });
     ultimaVenta = venta;
+    var eraCredito = formaPago === "credito";
+    var nomCli = clienteSel ? clienteSel.n : "";
     cart = {}; $("paga").value = ""; $("descVal").value = "";
+    clienteSel = null; setForma("efectivo");
     updateBar(); renderCart(); closeSheet("cartSheet");
-    mostrarCobrado(venta, pagaCon, descontar);
+    mostrarCobrado(venta, pagaCon, descontar, eraCredito, nomCli);
   });
 
   // ---------- pantalla de venta cobrada ----------
-  function mostrarCobrado(venta, pagaCon, descontar) {
+  function mostrarCobrado(venta, pagaCon, descontar, eraCredito, nomCli) {
     var h = '<div style="text-align:center; padding:6px 0 14px">' +
       '<div style="font-size:13px; color:#6b7a77">Total cobrado</div>' +
       '<div style="font-size:40px; font-weight:800; color:#0d6e5a; line-height:1.1">' + money(venta.total) + '</div>';
-    if (!isNaN(pagaCon) && pagaCon >= venta.total) {
+    if (venta.forma === "efectivo" && !isNaN(pagaCon) && pagaCon >= venta.total) {
       h += '<div style="font-size:15px; margin-top:8px">Pagó ' + money(pagaCon) +
            ' · <b style="color:#1462b8">Cambio ' + money(pagaCon - venta.total) + '</b></div>';
     }
     h += '</div>';
     h += '<div class="statline"><span>Folio</span><b>' + escapeHtml(venta.folio || "—") + '</b></div>';
+    h += '<div class="statline"><span>Forma de pago</span><b>' +
+         escapeHtml(S.NOMBRE_FORMA[venta.forma] || venta.forma) + '</b></div>';
+    if (eraCredito) {
+      h += '<div class="warn" style="margin-top:12px">Se fió a <b>' + escapeHtml(nomCli) +
+           '</b>. Queda en su cuenta; cóbralo desde ☰ Más → 🤝 Fiados.</div>';
+    }
     h += '<div class="statline"><span>Productos</span><b>' +
          venta.items.reduce(function (a, i) { return a + i.q; }, 0) + '</b></div>';
     if (venta.desc && venta.desc.monto > 0) {
@@ -242,6 +299,22 @@
   }
 
   $("okListo").addEventListener("click", function () { closeSheet("okSheet"); });
+
+  $("apartarBtn").addEventListener("click", function () {
+    var t = cartTotals();
+    if (t.items === 0) { toast("Agrega productos primero", "err"); return; }
+    var items = Object.keys(cart).map(function (k) {
+      var p = S.get(k);
+      return { c: k, n: p ? p.n : k, q: cart[k], p: p ? p.v : 0 };
+    });
+    if (window.Mas && window.Mas.nuevoApartado) {
+      window.Mas.nuevoApartado(items, t.total, clienteSel, function () {
+        cart = {}; $("paga").value = ""; $("descVal").value = "";
+        clienteSel = null; setForma("efectivo");
+        updateBar(); renderCart(); closeSheet("cartSheet");
+      });
+    }
+  });
 
   function enviarTicket(venta) {
     if (!venta) { toast("No hay venta para el ticket", "err"); return; }
@@ -633,5 +706,11 @@
   }
 
   // expuesto para pruebas
+  window.UI = {
+    toast: toast, openSheet: openSheet, closeSheet: closeSheet,
+    money: money, escapeHtml: escapeHtml, existTxt: existTxt,
+    render: render, enviarTicket: enviarTicket,
+    setCliente: function (c) { clienteSel = c; pintaCliente(); }
+  };
   window.__pos = { addToCart: addToCart, cart: function () { return cart; }, render: render, openEdit: openEdit };
 })();

@@ -113,6 +113,42 @@
   .dgroup input{width:86px; font-size:17px; padding:10px; border:2px solid var(--linea); border-radius:10px; text-align:right;}
   .subrow{font-size:13px; color:var(--muted); text-align:right; margin-bottom:6px; min-height:16px;}
   .subrow b{color:var(--rojo);}
+  .formas{display:flex; gap:6px; margin-bottom:8px;}
+  .forma{flex:1; padding:10px 4px; border:2px solid var(--linea); background:#fff; color:var(--muted);
+    border-radius:10px; font-size:11.5px; font-weight:700;}
+  .forma.activo{background:var(--verde); color:#fff; border-color:var(--verde);}
+  .clirow{display:flex; align-items:center; gap:10px; margin-bottom:8px; background:#fff8e1;
+    padding:9px 12px; border-radius:10px;}
+  .clirow span{flex:1; font-size:13.5px; font-weight:600;}
+  .btn-apart{background:#fff3d1; color:#8a6a00;}
+  .menu-item{display:flex; align-items:center; gap:14px; background:#fff; border:none; width:100%;
+    padding:16px; border-radius:14px; margin-bottom:10px; text-align:left; box-shadow:0 1px 3px rgba(0,0,0,.06);}
+  .menu-item .mi-ico{font-size:24px; width:32px; text-align:center;}
+  .menu-item .mi-txt{flex:1; min-width:0;}
+  .menu-item .mi-tit{display:block; font-size:16px; font-weight:700; color:var(--txt); line-height:1.25;}
+  .menu-item .mi-sub{display:block; font-size:12.5px; color:var(--muted); margin-top:3px; line-height:1.3;}
+  .menu-item .mi-bad{background:var(--verde); color:#fff; font-size:12px; font-weight:700;
+    padding:4px 9px; border-radius:20px;}
+  .menu-item .mi-bad.rojo{background:var(--rojo);} .menu-item .mi-bad.amar{background:var(--amar); color:#3a2c00;}
+  .chips{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;}
+  .chip{padding:8px 13px; border:2px solid var(--linea); background:#fff; color:var(--muted);
+    border-radius:20px; font-size:12.5px; font-weight:700;}
+  .chip.activo{background:var(--verde); color:#fff; border-color:var(--verde);}
+  .kpi{display:flex; gap:10px; margin-bottom:12px;}
+  .kpi > div{flex:1; background:#fff; border-radius:12px; padding:12px; text-align:center;}
+  .kpi .k-lbl{font-size:11px; color:var(--muted);}
+  .kpi .k-val{font-size:20px; font-weight:800; color:var(--verde); margin-top:3px;}
+  .kpi .k-val.azul{color:var(--azul);} .kpi .k-val.rojo{color:var(--rojo);}
+  .row-item{background:#fff; border-radius:12px; padding:11px 13px; margin-bottom:8px; display:flex; align-items:center; gap:10px;}
+  .row-item .ri-t{flex:1; min-width:0;}
+  .row-item .ri-n{font-size:14.5px; font-weight:600; line-height:1.25;}
+  .row-item .ri-s{font-size:11.5px; color:var(--muted); margin-top:2px;}
+  .row-item .ri-v{text-align:right; white-space:nowrap; font-weight:700; font-size:15px;}
+  .row-item .ri-v.rojo{color:var(--rojo);} .row-item .ri-v.verde{color:var(--verde);}
+  .badge{display:inline-block; font-size:10px; font-weight:700; padding:2px 7px; border-radius:6px;}
+  .badge.abierto{background:#fff3d1; color:#8a6a00;}
+  .badge.entregado{background:#d9f0e6; color:#0a5a49;}
+  .badge.cancelado{background:#f3d9d6; color:#c0392b;}
   .foot-btns{display:flex; gap:10px;}
   .foot-btns button{flex:1; padding:15px; border:none; border-radius:12px; font-size:16px; font-weight:700;}
   .btn-clear{background:#f3d9d6; color:var(--rojo);}
@@ -175,8 +211,9 @@
 </div>
 <div class="toolrow">
   <span class="count" id="count"></span>
-  <button class="minibtn" id="newProdBtn">＋ Nuevo producto</button>
+  <button class="minibtn" id="newProdBtn">＋ Producto</button>
   <button class="minibtn" id="cajaBtn">📊 Hoy</button>
+  <button class="minibtn" id="masBtn" style="background:var(--verde);color:#fff;border-color:var(--verde)">☰ Más</button>
 </div>
 <div id="list"></div>
 
@@ -204,10 +241,21 @@
       </div>
       <div class="subrow" id="subrow"></div>
       <div class="totalrow"><span class="t-lbl">TOTAL</span><span class="t-val" id="cartTotal">$0.00</span></div>
-      <div class="pago"><label>¿Con cuánto paga?</label><input id="paga" type="number" inputmode="decimal" placeholder="$"></div>
+      <div class="formas" id="formas">
+        <button class="forma activo" data-forma="efectivo">💵 Efectivo</button>
+        <button class="forma" data-forma="transferencia">📲 Transfer.</button>
+        <button class="forma" data-forma="tarjeta">💳 Tarjeta</button>
+        <button class="forma" data-forma="credito">🤝 Fiado</button>
+      </div>
+      <div id="cliRow" class="clirow" style="display:none">
+        <span id="cliNombre">Sin cliente</span>
+        <button class="minibtn" id="pickCli">Elegir cliente</button>
+      </div>
+      <div class="pago" id="pagoRow"><label>¿Con cuánto paga?</label><input id="paga" type="number" inputmode="decimal" placeholder="$"></div>
       <div class="cambio" id="cambio"></div>
       <div class="foot-btns">
-        <button class="btn-clear" id="clearCart">🗑 Cancelar</button>
+        <button class="btn-clear" id="clearCart">🗑</button>
+        <button class="btn-apart" id="apartarBtn">🎁 Apartar</button>
         <button class="btn-done" id="doneCart">✓ Cobrado</button>
       </div>
     </div>
@@ -256,6 +304,27 @@
   </div>
 </div>
 
+<!-- Menú Más -->
+<div id="menuSheet" class="sheetwrap">
+  <div class="sheet">
+    <div class="sheet-head"><h2>☰ Más</h2><button class="closex" data-close="menuSheet">✕</button></div>
+    <div class="sheet-body" id="menuBody"></div>
+  </div>
+</div>
+
+<!-- Panel genérico (fiados, apartados, reportes, inventario, turno) -->
+<div id="panelSheet" class="sheetwrap">
+  <div class="sheet">
+    <div class="sheet-head">
+      <button class="closex" id="panelBack" style="display:none">‹</button>
+      <h2 id="panelTitle">—</h2>
+      <button class="closex" data-close="panelSheet">✕</button>
+    </div>
+    <div class="sheet-body" id="panelBody"></div>
+    <div class="sheet-foot" id="panelFoot" style="display:none"></div>
+  </div>
+</div>
+
 <!-- Corte del día -->
 <div id="cajaSheet" class="sheetwrap">
   <div class="sheet">
@@ -287,5 +356,6 @@
 <script src="jspdf.min.js"></script>
 <script src="ticket.js"></script>
 <script src="app.js"></script>
+<script src="mas.js"></script>
 </body>
 </html>
