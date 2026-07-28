@@ -35,7 +35,10 @@ window.Store = (function () {
   if (!overlay.items) overlay.items = {};
   if (!overlay.sales) overlay.sales = [];
 
-  var conf = readLS(LS_CONF, { token: "", gistId: "", lastSync: 0, autoStock: true, deviceId: "" });
+  var conf = readLS(LS_CONF, {
+    token: "", gistId: "", lastSync: 0, autoStock: true, deviceId: "",
+    negocio: "", telefono: "", garantiaDias: 0, garantiaTexto: "", folioSeq: 0
+  });
   if (!conf.deviceId) {
     conf.deviceId = "d" + Math.random().toString(36).slice(2, 8) + Date.now().toString(36);
     writeLS(LS_CONF, conf);
@@ -206,24 +209,46 @@ window.Store = (function () {
   function isEdited(code) { return !!overlay.items[code]; }
 
   // ---------- ventas ----------
-  function registrarVenta(items, total, descontar) {
+  function siguienteFolio() {
+    conf.folioSeq = (conf.folioSeq || 0) + 1;
+    writeLS(LS_CONF, conf);
+    var pref = (conf.deviceId || "XX").slice(-2).toUpperCase();
+    return pref + "-" + String(conf.folioSeq).padStart(4, "0");
+  }
+
+  function registrarVenta(items, total, descontar, extra) {
     // items: [{c, n, q, p}]
     // No guardamos la existencia final: guardamos LA VENTA.
     // La existencia se calcula sumando las ventas de todos los celulares,
     // así dos personas pueden vender a la vez sin perder descuentos.
+    extra = extra || {};
     var t = now();
-    overlay.sales.push({
+    var venta = {
       id: conf.deviceId + "-" + t + "-" + Math.random().toString(36).slice(2, 7),
       dev: conf.deviceId,
+      folio: siguienteFolio(),
       t: t,
       dec: descontar !== false,
+      sub: extra.sub !== undefined ? extra.sub : total,   // antes del descuento
+      desc: extra.desc || null,                            // {tipo:"$"|"%", val, monto}
       total: total,
       items: items.map(function (i) { return { c: i.c, n: i.n, q: i.q, p: i.p }; })
-    });
+    };
+    overlay.sales.push(venta);
     // conservar solo las últimas 500 ventas
     if (overlay.sales.length > 500) overlay.sales = overlay.sales.slice(-500);
     persist();
-    return t;
+    return venta;
+  }
+
+  // Calcula el descuento de una venta. tipo: "$" (pesos) o "%" (porcentaje)
+  function calcularDescuento(subtotal, tipo, valor) {
+    var v = parseFloat(valor);
+    if (!isFinite(v) || v <= 0) return { tipo: tipo, val: 0, monto: 0 };
+    var monto = (tipo === "%") ? (subtotal * v / 100) : v;
+    if (monto > subtotal) monto = subtotal;      // nunca dejar el total en negativo
+    monto = Math.round(monto * 100) / 100;
+    return { tipo: tipo, val: v, monto: monto };
   }
 
   function ventasDeHoy() {
@@ -424,6 +449,7 @@ window.Store = (function () {
     updateProduct: updateProduct, addProduct: addProduct,
     deleteProduct: deleteProduct, restoreProduct: restoreProduct,
     registrarVenta: registrarVenta, ventasDeHoy: ventasDeHoy,
+    calcularDescuento: calcularDescuento,
     borrarMisCambios: borrarMisCambios, exportOverlay: exportOverlay,
     applyRemote: applyRemote, mergeOverlays: mergeOverlays,
     getConf: getConf, setConf: setConf,

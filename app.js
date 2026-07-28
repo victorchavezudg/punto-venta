@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "2.1";
+  var VERSION = "3.0";
   var S = window.Store;
   var $ = function (id) { return document.getElementById(id); };
 
@@ -25,6 +25,8 @@
 
   var cart = {};   // code -> qty
   var lastTerm = "";
+  var descTipo = "$";      // "$" pesos o "%" porcentaje
+  var ultimaVenta = null;  // para el ticket
 
   // ---------- índice de búsqueda ----------
   var index = [];
@@ -121,14 +123,18 @@
     if (navigator.vibrate) navigator.vibrate(30);
   }
   function cartTotals() {
-    var total = 0, items = 0;
+    var sub = 0, items = 0;
     for (var c in cart) {
       var p = S.get(c);
       if (!p) continue;
-      total += (Number(p.v) || 0) * cart[c];
+      sub += (Number(p.v) || 0) * cart[c];
       items += cart[c];
     }
-    return { total: total, items: items };
+    sub = Math.round(sub * 100) / 100;
+    var campo = $("descVal");
+    var desc = S.calcularDescuento(sub, descTipo, campo ? campo.value : 0);
+    var total = Math.round((sub - desc.monto) * 100) / 100;
+    return { sub: sub, desc: desc, total: total, items: items };
   }
   function updateBar() {
     var t = cartTotals(), bar = $("ventaBar");
@@ -141,6 +147,12 @@
       closeSheet("cartSheet");
     }
     $("cartTotal").textContent = money(t.total);
+    var sr = $("subrow");
+    if (sr) {
+      sr.innerHTML = (t.desc && t.desc.monto > 0)
+        ? "Subtotal " + money(t.sub) + " &nbsp;·&nbsp; <b>Descuento −" + money(t.desc.monto) + "</b>"
+        : "";
+    }
     calcCambio();
   }
   function renderCart() {
@@ -171,9 +183,19 @@
     } else el.innerHTML = "";
   }
   $("paga").addEventListener("input", calcCambio);
+  $("descVal").addEventListener("input", function () { updateBar(); });
+  function setTipoDesc(t) {
+    descTipo = t;
+    $("dPesos").classList.toggle("activo", t === "$");
+    $("dPct").classList.toggle("activo", t === "%");
+    updateBar();
+  }
+  $("dPesos").addEventListener("click", function () { setTipoDesc("$"); });
+  $("dPct").addEventListener("click", function () { setTipoDesc("%"); });
   $("openCart").addEventListener("click", function () { renderCart(); openSheet("cartSheet"); });
   $("clearCart").addEventListener("click", function () {
-    cart = {}; $("paga").value = ""; updateBar(); renderCart(); closeSheet("cartSheet");
+    cart = {}; $("paga").value = ""; $("descVal").value = "";
+    updateBar(); renderCart(); closeSheet("cartSheet");
     toast("Venta cancelada", "ok");
   });
   $("doneCart").addEventListener("click", function () {
@@ -184,11 +206,54 @@
       return { c: k, n: p ? p.n : k, q: cart[k], p: p ? p.v : 0 };
     });
     var descontar = S.getConf().autoStock !== false;
-    S.registrarVenta(items, t.total, descontar);
-    cart = {}; $("paga").value = "";
+    var pagaCon = parseFloat($("paga").value);
+    var venta = S.registrarVenta(items, t.total, descontar, {
+      sub: t.sub,
+      desc: (t.desc && t.desc.monto > 0) ? t.desc : null
+    });
+    ultimaVenta = venta;
+    cart = {}; $("paga").value = ""; $("descVal").value = "";
     updateBar(); renderCart(); closeSheet("cartSheet");
-    toast("✓ Cobrado " + money(t.total) + (descontar ? " · inventario actualizado" : ""), "ok");
+    mostrarCobrado(venta, pagaCon, descontar);
   });
+
+  // ---------- pantalla de venta cobrada ----------
+  function mostrarCobrado(venta, pagaCon, descontar) {
+    var h = '<div style="text-align:center; padding:6px 0 14px">' +
+      '<div style="font-size:13px; color:#6b7a77">Total cobrado</div>' +
+      '<div style="font-size:40px; font-weight:800; color:#0d6e5a; line-height:1.1">' + money(venta.total) + '</div>';
+    if (!isNaN(pagaCon) && pagaCon >= venta.total) {
+      h += '<div style="font-size:15px; margin-top:8px">Pagó ' + money(pagaCon) +
+           ' · <b style="color:#1462b8">Cambio ' + money(pagaCon - venta.total) + '</b></div>';
+    }
+    h += '</div>';
+    h += '<div class="statline"><span>Folio</span><b>' + escapeHtml(venta.folio || "—") + '</b></div>';
+    h += '<div class="statline"><span>Productos</span><b>' +
+         venta.items.reduce(function (a, i) { return a + i.q; }, 0) + '</b></div>';
+    if (venta.desc && venta.desc.monto > 0) {
+      h += '<div class="statline"><span>Descuento aplicado</span><b style="color:#c0392b">−' +
+           money(venta.desc.monto) + '</b></div>';
+    }
+    if (descontar) h += '<div class="okbox" style="margin-top:14px">Inventario actualizado ✓</div>';
+    h += '<div class="hint" style="margin-top:10px">El ticket incluye folio, fecha, productos y la leyenda de garantía. ' +
+         'Al tocar el botón, tu celular te deja elegir <b>WhatsApp</b> para enviárselo al cliente.</div>';
+    $("okBody").innerHTML = h;
+    openSheet("okSheet");
+  }
+
+  $("okListo").addEventListener("click", function () { closeSheet("okSheet"); });
+
+  function enviarTicket(venta) {
+    if (!venta) { toast("No hay venta para el ticket", "err"); return; }
+    if (!window.Ticket) { toast("No se pudo cargar el generador de PDF", "err"); return; }
+    toast("Generando ticket…", "ok");
+    window.Ticket.compartir(venta, S.getConf()).then(function (r) {
+      if (!r.ok) { toast(r.error || "No se pudo crear el ticket", "err"); return; }
+      if (r.modo === "descargado") toast("Ticket guardado en Descargas 📄", "ok");
+      else if (r.modo === "compartido") toast("Ticket enviado ✓", "ok");
+    });
+  }
+  $("ticketBtn").addEventListener("click", function () { enviarTicket(ultimaVenta); });
 
   // ---------- hojas ----------
   function openSheet(id) { $(id).classList.add("open"); }
@@ -281,15 +346,25 @@
       v.list.slice().reverse().forEach(function (s) {
         var h = new Date(s.t);
         var hora = ("0" + h.getHours()).slice(-2) + ":" + ("0" + h.getMinutes()).slice(-2);
-        html += '<div class="ci" style="margin-top:8px"><div class="ci-n">' + hora + ' — ' +
+        html += '<div class="ci" style="margin-top:8px"><div class="ci-n">' + hora +
+          (s.folio ? ' · <b>' + escapeHtml(s.folio) + '</b>' : '') + ' — ' +
           s.items.length + (s.items.length === 1 ? " producto" : " productos") +
+          (s.desc && s.desc.monto > 0 ? ' <span style="color:#c0392b">(desc. −' + money(s.desc.monto) + ')</span>' : '') +
           '<small>' + escapeHtml(s.items.map(function (i) { return i.n + " x" + i.q; }).join(", ").slice(0, 90)) + '</small></div>' +
-          '<div class="ci-sub">' + money(s.total) + '</div></div>';
+          '<div class="ci-sub">' + money(s.total) + '</div>' +
+          '<button class="minibtn" data-ticket="' + escapeHtml(s.id || "") + '" style="margin-left:8px">📄</button></div>';
       });
     } else {
       html += '<div class="empty">Todavía no hay ventas hoy.</div>';
     }
     $("cajaBody").innerHTML = html;
+    $("cajaBody").querySelectorAll("[data-ticket]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var id = b.getAttribute("data-ticket");
+        var venta = v.list.filter(function (x) { return (x.id || "") === id; })[0];
+        enviarTicket(venta);
+      });
+    });
     openSheet("cajaSheet");
   });
 
@@ -332,6 +407,20 @@
       '<button class="' + (c.autoStock !== false ? 'b-save' : 'b-rest') + '" id="toggleStock">' +
       (c.autoStock !== false ? '✓ Descontar del inventario' : '✗ No descontar') + '</button></div>';
 
+    html += '<div style="margin-top:6px; font-weight:700; font-size:14px">🧾 Datos del ticket</div>' +
+      '<div class="hint" style="margin-top:6px">Esto es lo que sale impreso en el ticket PDF que le mandas al cliente.</div>' +
+      '<div class="field"><label>Nombre del negocio</label>' +
+        '<input id="f_neg" type="text" placeholder="Ej. Electrónica y Papelería Chávez" value="' + escapeHtml(c.negocio || "") + '"></div>' +
+      '<div class="field"><label>Teléfono / WhatsApp de contacto</label>' +
+        '<input id="f_tel" type="tel" inputmode="tel" placeholder="Ej. 33 1234 5678" value="' + escapeHtml(c.telefono || "") + '"></div>' +
+      '<div class="field"><label>Días de garantía (0 = no imprimir)</label>' +
+        '<input id="f_gdias" type="number" inputmode="numeric" min="0" placeholder="Ej. 30" value="' + (c.garantiaDias || "") + '"></div>' +
+      '<div class="field"><label>Texto de la garantía (opcional)</label>' +
+        '<input id="f_gtxt" type="text" placeholder="Se deja uno por defecto si lo dejas vacío" value="' + escapeHtml(c.garantiaTexto || "") + '"></div>' +
+      '<div class="btnrow" style="margin-bottom:18px">' +
+        '<button class="b-save" id="saveNeg">Guardar datos</button>' +
+        '<button class="b-rest" id="verTicket">👁 Ver ejemplo</button></div>';
+
     html += '<div style="margin-top:6px; font-weight:700; font-size:14px">🔄 Actualizar la app</div>' +
       '<div class="hint" style="margin-top:6px">Si Claude publicó mejoras y no las ves, toca aquí (necesitas señal). Tus cambios NO se borran.</div>' +
       '<div class="btnrow" style="margin-bottom:18px"><button class="b-save" id="forceUpdate">⬇️ Buscar actualización</button></div>';
@@ -358,6 +447,33 @@
     if (sn) sn.addEventListener("click", function () {
       toast("Sincronizando…", "ok");
       S.sync.run(true).then(function (ok) { toast(ok ? "☁️ Al día" : S.sync.get().msg, ok ? "ok" : "err"); renderCfg(); });
+    });
+    $("saveNeg").addEventListener("click", function () {
+      S.setConf({
+        negocio: $("f_neg").value.trim(),
+        telefono: $("f_tel").value.trim(),
+        garantiaDias: parseInt($("f_gdias").value, 10) || 0,
+        garantiaTexto: $("f_gtxt").value.trim()
+      });
+      toast("Datos guardados ✓", "ok");
+    });
+    $("verTicket").addEventListener("click", function () {
+      S.setConf({
+        negocio: $("f_neg").value.trim(),
+        telefono: $("f_tel").value.trim(),
+        garantiaDias: parseInt($("f_gdias").value, 10) || 0,
+        garantiaTexto: $("f_gtxt").value.trim()
+      });
+      var hoy = S.ventasDeHoy();
+      var muestra = hoy.list.length ? hoy.list[hoy.list.length - 1] : {
+        folio: "EJEMPLO", t: Date.now(), sub: 350, total: 315,
+        desc: { tipo: "%", val: 10, monto: 35 },
+        items: [
+          { c: "1", n: "Bocina Bluetooth portátil", q: 1, p: 250 },
+          { c: "2", n: "Cable USB-C 1m", q: 2, p: 50 }
+        ]
+      };
+      enviarTicket(muestra);
     });
     $("forceUpdate").addEventListener("click", function () {
       toast("Buscando actualización…", "ok");

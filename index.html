@@ -104,6 +104,15 @@
   .pago input{width:120px; font-size:18px; padding:10px; border:2px solid var(--linea); border-radius:10px; text-align:right;}
   .cambio{text-align:right; font-size:15px; margin-bottom:12px; min-height:20px;}
   .cambio b{font-size:21px; color:var(--azul);}
+  .descrow{display:flex; align-items:center; gap:10px; margin-bottom:8px;}
+  .descrow .d-lbl{font-size:14px; color:var(--muted); flex:1;}
+  .dgroup{display:flex; align-items:center; gap:6px;}
+  .dtipo{width:38px; height:40px; border:2px solid var(--linea); background:#fff; color:var(--muted);
+    border-radius:10px; font-size:16px; font-weight:800;}
+  .dtipo.activo{background:var(--verde); color:#fff; border-color:var(--verde);}
+  .dgroup input{width:86px; font-size:17px; padding:10px; border:2px solid var(--linea); border-radius:10px; text-align:right;}
+  .subrow{font-size:13px; color:var(--muted); text-align:right; margin-bottom:6px; min-height:16px;}
+  .subrow b{color:var(--rojo);}
   .foot-btns{display:flex; gap:10px;}
   .foot-btns button{flex:1; padding:15px; border:none; border-radius:12px; font-size:16px; font-weight:700;}
   .btn-clear{background:#f3d9d6; color:var(--rojo);}
@@ -185,6 +194,15 @@
     <div class="sheet-head"><h2>🧾 Venta actual</h2><button class="closex" data-close="cartSheet">✕</button></div>
     <div class="sheet-body" id="cartItems"></div>
     <div class="sheet-foot">
+      <div class="descrow">
+        <span class="d-lbl">Descuento</span>
+        <div class="dgroup">
+          <button class="dtipo activo" id="dPesos" type="button">$</button>
+          <button class="dtipo" id="dPct" type="button">%</button>
+          <input id="descVal" type="number" inputmode="decimal" placeholder="0" min="0">
+        </div>
+      </div>
+      <div class="subrow" id="subrow"></div>
       <div class="totalrow"><span class="t-lbl">TOTAL</span><span class="t-val" id="cartTotal">$0.00</span></div>
       <div class="pago"><label>¿Con cuánto paga?</label><input id="paga" type="number" inputmode="decimal" placeholder="$"></div>
       <div class="cambio" id="cambio"></div>
@@ -224,6 +242,20 @@
   </div>
 </div>
 
+<!-- Venta cobrada -->
+<div id="okSheet" class="sheetwrap">
+  <div class="sheet">
+    <div class="sheet-head"><h2>✅ Venta cobrada</h2><button class="closex" data-close="okSheet">✕</button></div>
+    <div class="sheet-body" id="okBody"></div>
+    <div class="sheet-foot">
+      <div class="btnrow">
+        <button class="b-save" id="ticketBtn">📄 Ticket para WhatsApp</button>
+        <button class="b-rest" id="okListo">Listo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Corte del día -->
 <div id="cajaSheet" class="sheetwrap">
   <div class="sheet">
@@ -252,6 +284,8 @@
 <script src="data.js"></script>
 <script src="store.js"></script>
 <script src="html5-qrcode.min.js"></script>
+<script src="jspdf.min.js"></script>
+<script src="ticket.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
