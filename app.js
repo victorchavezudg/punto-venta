@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "4.0";
+  var VERSION = "5.0";
   var S = window.Store;
   var $ = function (id) { return document.getElementById(id); };
 
@@ -120,7 +120,7 @@
     var p = S.get(code);
     if (!p) { toast("Producto no encontrado", "err"); return; }
     cart[code] = (cart[code] || 0) + 1;
-    updateBar();
+    updateBar(); renderCart();
     if (!silent) toast("➕ " + p.n + (p.v > 0 ? "  " + money(p.v) : ""), "ok");
     if (navigator.vibrate) navigator.vibrate(30);
   }
@@ -139,15 +139,13 @@
     return { sub: sub, desc: desc, total: total, items: items };
   }
   function updateBar() {
-    var t = cartTotals(), bar = $("ventaBar");
-    if (t.items > 0) {
-      bar.classList.remove("hidden");
-      $("vbCount").textContent = t.items + (t.items === 1 ? " producto" : " productos");
-      $("vbTotal").textContent = money(t.total);
-    } else {
-      bar.classList.add("hidden");
-      closeSheet("cartSheet");
-    }
+    var t = cartTotals();
+    document.body.classList.toggle("cart-vacia", t.items === 0);
+    $("cartCount").textContent = t.items + (t.items === 1 ? " pieza" : " piezas");
+    var cm = $("cobrarMovil");
+    if (cm) cm.textContent = t.items ? ("💵 Cobrar " + money(t.total)) : "💵 Cobrar";
+    var pt = $("payTotal");
+    if (pt) pt.textContent = money(t.total);
     $("cartTotal").textContent = money(t.total);
     var sr = $("subrow");
     if (sr) {
@@ -159,7 +157,10 @@
   }
   function renderCart() {
     var box = $("cartItems"), keys = Object.keys(cart), html = "";
-    if (!keys.length) { box.innerHTML = '<div class="empty">Sin productos.<br>Busca o escanea para agregar.</div>'; return; }
+    if (!keys.length) {
+      box.innerHTML = '<div class="cart-vacio">Aquí verás lo que le estás cobrando al cliente.<br>Busca o escanea un producto.</div>';
+      return;
+    }
     keys.forEach(function (k) {
       var p = S.get(k); if (!p) return;
       var sub = (Number(p.v) || 0) * cart[k];
@@ -225,16 +226,15 @@
       window.Mas.elegirCliente(function (cli) { clienteSel = cli; pintaCliente(); });
     }
   });
-  $("openCart").addEventListener("click", function () { renderCart(); openSheet("cartSheet"); });
   $("clearCart").addEventListener("click", function () {
     cart = {}; $("paga").value = ""; $("descVal").value = "";
     clienteSel = null; setForma("efectivo");
-    updateBar(); renderCart(); closeSheet("cartSheet");
+    updateBar(); renderCart(); closeSheet("paySheet");
     toast("Venta cancelada", "ok");
   });
   $("doneCart").addEventListener("click", function () {
     var t = cartTotals();
-    if (t.items === 0) { closeSheet("cartSheet"); return; }
+    if (t.items === 0) { closeSheet("paySheet"); return; }
     var items = Object.keys(cart).map(function (k) {
       var p = S.get(k);
       return { c: k, n: p ? p.n : k, q: cart[k], p: p ? p.v : 0 };
@@ -264,7 +264,7 @@
     var nomCli = clienteSel ? clienteSel.n : "";
     cart = {}; $("paga").value = ""; $("descVal").value = "";
     clienteSel = null; setForma("efectivo");
-    updateBar(); renderCart(); closeSheet("cartSheet");
+    updateBar(); renderCart(); closeSheet("paySheet");
     mostrarCobrado(venta, pagaCon, descontar, eraCredito, nomCli);
   });
 
@@ -298,7 +298,7 @@
     openSheet("okSheet");
   }
 
-  $("okListo").addEventListener("click", function () { closeSheet("okSheet"); });
+  $("okListo").addEventListener("click", function () { closeSheet("okSheet"); focoBusqueda(); });
 
   $("apartarBtn").addEventListener("click", function () {
     var t = cartTotals();
@@ -311,7 +311,7 @@
       window.Mas.nuevoApartado(items, t.total, clienteSel, function () {
         cart = {}; $("paga").value = ""; $("descVal").value = "";
         clienteSel = null; setForma("efectivo");
-        updateBar(); renderCart(); closeSheet("cartSheet");
+        updateBar(); renderCart(); closeSheet("paySheet");
       });
     }
   });
@@ -335,7 +335,7 @@
     var c = e.target.closest("[data-close]");
     if (c) closeSheet(c.getAttribute("data-close"));
   });
-  ["cartSheet", "editSheet", "cajaSheet", "cfgSheet"].forEach(function (id) {
+  ["paySheet", "okSheet", "editSheet", "cajaSheet", "cfgSheet"].forEach(function (id) {
     $(id).addEventListener("click", function (e) { if (e.target === this) closeSheet(id); });
   });
 
@@ -664,6 +664,73 @@
   }
   $("closeScan").addEventListener("click", closeScan);
 
+
+  // ================= PANTALLA: celular vs tablet/PC =================
+  var esAncho = function () { return window.matchMedia("(min-width: 900px)").matches; };
+
+  function acomodarPago() {
+    var box = $("payBox");
+    if (!box) return;
+    var destino = esAncho() ? document.querySelector(".cart-foot") : $("paySheetBody");
+    if (box.parentNode !== destino) {
+      if (esAncho()) destino.insertBefore(box, $("cobrarMovil"));
+      else destino.appendChild(box);
+    }
+    box.classList.toggle("payinline", esAncho());
+    if (esAncho()) closeSheet("paySheet");
+  }
+  window.addEventListener("resize", acomodarPago);
+  window.addEventListener("orientationchange", acomodarPago);
+
+  $("cobrarMovil").addEventListener("click", function () {
+    if (cartTotals().items === 0) { toast("Agrega productos primero", "err"); return; }
+    acomodarPago();
+    openSheet("paySheet");
+  });
+
+  // ================= ATAJOS DE TECLADO (mostrador con PC) =================
+  document.addEventListener("keydown", function (e) {
+    var enCampo = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || "").toUpperCase());
+    var hayHoja = !!document.querySelector(".sheetwrap.open");
+
+    // Enter en la búsqueda: agrega el primer resultado (ideal con lector láser)
+    if (e.key === "Enter" && e.target === $("q")) {
+      e.preventDefault();
+      var term = $("q").value.trim();
+      if (!term) return;
+      var res = search(term);
+      // si el texto es un código exacto, ese gana
+      var exacto = S.get(term);
+      var elegido = exacto || (res.length ? res[0] : null);
+      if (elegido) {
+        addToCart(elegido.c);
+        $("q").value = ""; lastTerm = ""; render();
+      } else {
+        toast("No encontré \"" + term + "\"", "err");
+      }
+      return;
+    }
+    if (enCampo && e.key !== "Escape" && e.key.indexOf("F") !== 0) return;
+
+    if (e.key === "Escape") {
+      if (hayHoja) return;                     // que cierre la hoja el propio botón
+      if (Object.keys(cart).length && confirm("¿Cancelar la venta en curso?")) {
+        cart = {}; $("paga").value = ""; $("descVal").value = "";
+        clienteSel = null; setForma("efectivo");
+        updateBar(); renderCart();
+      }
+      $("q").value = ""; lastTerm = ""; render(); $("q").focus();
+      return;
+    }
+    if (e.key === "F12") { e.preventDefault(); if (!hayHoja) $("doneCart").click(); return; }
+    if (e.key === "F2")  { e.preventDefault(); $("q").focus(); $("q").select(); return; }
+    if (e.key === "F3")  { e.preventDefault(); if (!hayHoja) $("masBtn").click(); return; }
+    if (e.key === "F4")  { e.preventDefault(); if (!hayHoja) $("cajaBtn").click(); return; }
+  });
+
+  // el foco vuelve a la búsqueda tras cobrar (flujo de mostrador)
+  function focoBusqueda() { if (esAncho()) setTimeout(function () { $("q").focus(); }, 120); }
+
   // ---------- toast ----------
   var toastEl = $("toast"), toastT;
   function toast(msg, kind) {
@@ -676,6 +743,8 @@
   // ---------- encabezado ----------
   function updateHeader() {
     var n = S.all().length, st = S.sync.get(), c = S.getConf();
+    var tit = $("hTitulo");
+    if (tit) tit.textContent = (c.negocio && c.negocio.trim()) ? ("🛒 " + c.negocio.trim()) : "🛒 Punto de Venta";
     var estado = c.token ? st.msg : "guardado en este celular";
     $("hsub").innerHTML = '<span class="sync-dot ' + (c.token ? st.status : "offline") + '"></span>' +
       n.toLocaleString("es-MX") + " productos · " + escapeHtml(estado);
@@ -696,6 +765,8 @@
   // ---------- arranque ----------
   reindex();
   render();
+  renderCart();
+  acomodarPago();
   updateBar();
   updateHeader();
 
